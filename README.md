@@ -1,4 +1,3 @@
-<!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
@@ -57,7 +56,7 @@
 
   <script>
     // 🔽 너의 Apps Script Web App URL 넣기
-    const API_URL = "https://script.google.com/macros/s/AKfycbzL71rMBzJvauXeFyFz2AuHXILUbQxO3IosQkMDySF3LB8LIXp3OGPc7r88Zw6zSdmh/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbwRcIc-LvIumOnpsmthxObSYgVgqq2obWS69VVPt9k2gBBfLHLHeQZeGB3r6rpuyVE/exec";
 
     async function loadResult(){
       try{
