@@ -141,7 +141,7 @@
         const dd = String(d.getDate()).padStart(2, "0");
         const hh = String(d.getHours()).padStart(2, "0");
         const mi = String(d.getMinutes()).padStart(2, "0");
-        return `${mm}.${dd} ${hh}:${mi}`;
+        return `${mm}.${dd} / ${hh}:${mi}`;
       }
 
       function loadHistory(){
