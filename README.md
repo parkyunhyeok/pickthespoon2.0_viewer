@@ -54,35 +54,55 @@
     <div class="hint">이 페이지는 자동으로 최신 결과를 불러옵니다</div>
   </div>
 
-  <script>
-    // 🔽 너의 Apps Script Web App URL 넣기
-    const API_URL = "https://script.google.com/macros/s/AKfycbwRcIc-LvIumOnpsmthxObSYgVgqq2obWS69VVPt9k2gBBfLHLHeQZeGB3r6rpuyVE/exec";
+<script>
+  const API_URL = "https://script.google.com/macros/s/AKfycbzL71rMBzJvauXeFyFz2AuHXILUbQxO3IosQkMDySF3LB8LIXp3OGPc7r88Zw6zSdmh/exec";
 
-    async function loadResult(){
-      try{
-        const res = await fetch(API_URL);
-        const json = await res.json();
+  function safeText(v){
+    return (v === null || v === undefined) ? "" : String(v);
+  }
 
-        if (!json.ok || !json.data) {
-          document.getElementById("result").innerText = "아직 뽑기 결과가 없습니다.";
-          return;
-        }
+  async function loadResult(){
+    const timeEl = document.getElementById("time");
+    const resultEl = document.getElementById("result");
 
-        const { pickedAt, resultText } = json.data;
+    try{
+      const res = await fetch(API_URL + "?t=" + Date.now()); // 캐시 방지
+      const json = await res.json();
 
-        document.getElementById("time").innerText =
-          "뽑은 시간: " + new Date(pickedAt).toLocaleString();
-
-        document.getElementById("result").innerText =
-          resultText || "결과가 비어있습니다.";
-      } catch(e){
-        document.getElementById("result").innerText =
-          "결과를 불러오지 못했습니다.";
+      if (!json || json.ok === false) {
+        resultEl.innerText = "결과를 불러오지 못했습니다.";
+        timeEl.innerText = "";
+        return;
       }
-    }
 
-    loadResult();
-    setInterval(loadResult, 15000); // 15초마다 자동 갱신
-  </script>
+      // ✅ Apps Script가 2가지 형태 중 무엇을 주든 대응
+      // 1) { ok:true, data:{ pickedAt, resultText } }  (텍스트만 저장하도록 바꾼 경우)
+      // 2) { updatedAt, ... , text:"A조...\n휴식자..." } 또는 { ok:true, data:{..., text:"..."} }
+      const data = json.data ?? json;
+
+      const pickedAt = data.pickedAt || data.updatedAt || "";
+      const resultText = data.resultText || data.text || "";
+
+      if (!resultText) {
+        resultEl.innerText = "아직 뽑기 결과가 없습니다.";
+      } else {
+        // 혹시 \n이 문자로 들어오면 실제 줄바꿈으로 변환
+        resultEl.innerText = safeText(resultText).replace(/\\n/g, "\n").trim();
+      }
+
+      if (pickedAt) {
+        timeEl.innerText = "뽑은 시간: " + new Date(pickedAt).toLocaleString();
+      } else {
+        timeEl.innerText = "";
+      }
+    } catch(e){
+      resultEl.innerText = "결과를 불러오지 못했습니다.";
+      timeEl.innerText = "";
+    }
+  }
+
+  loadResult();
+  setInterval(loadResult, 15000); // 15초마다 자동 갱신
+</script>
 </body>
 </html>
