@@ -58,127 +58,114 @@
   </div>
 
   <script>
-    /*********************************************************
-     * 🔽 Apps Script Web App URL
-     *********************************************************/
-    const API_URL =
-      "https://script.google.com/macros/s/AKfycbwRcIc-LvIumOnpsmthxObSYgVgqq2obWS69VVPt9k2gBBfLHLHeQZeGB3r6rpuyVE/exec";
+    document.addEventListener("DOMContentLoaded", () => {
+      const API_URL =
+        "https://script.google.com/macros/s/AKfycbwRcIc-LvIumOnpsmthxObSYgVgqq2obWS69VVPt9k2gBBfLHLHeQZeGB3r6rpuyVE/exec";
 
-    // ✅ 최근 N시간 누적 표시 설정
-    const HOURS = 3;
-    const MAX_AGE_MS = HOURS * 60 * 60 * 1000;
-    const STORAGE_KEY = "rks_team_results_v1";
+      const HOURS = 3;
+      const MAX_AGE_MS = HOURS * 60 * 60 * 1000;
+      const STORAGE_KEY = "rks_team_results_v1";
 
-    function safe(v){
-      return (v === null || v === undefined) ? "" : String(v);
-    }
-
-    function normalizeText(t){
-      // \n이 문자열로 올 경우 실제 줄바꿈 처리
-      return safe(t).replace(/\\n/g, "\n").trim();
-    }
-
-    function parsePickedAt(v){
-      if (!v) return null;
-      const d = new Date(v);
-      return isNaN(d.getTime()) ? null : d;
-    }
-
-    function loadHistory(){
-      try{
-        const raw = localStorage.getItem(STORAGE_KEY);
-        const arr = raw ? JSON.parse(raw) : [];
-        return Array.isArray(arr) ? arr : [];
-      } catch {
-        return [];
-      }
-    }
-
-    function saveHistory(arr){
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
-    }
-
-    function pruneHistory(arr){
-      const now = Date.now();
-      return arr.filter(item =>
-        item &&
-        typeof item.ts === "number" &&
-        typeof item.text === "string" &&
-        (now - item.ts) <= MAX_AGE_MS
-      );
-    }
-
-    function renderHistory(arr){
-      const resultEl = document.getElementById("result");
-      const timeEl   = document.getElementById("time");
-
-      if (!arr.length){
-        resultEl.innerText = "최근 3시간 내 팀 매칭 결과가 없습니다.";
-        timeEl.innerText = "";
-        return;
+      function safe(v){
+        return (v === null || v === undefined) ? "" : String(v);
       }
 
-      // 최신순 정렬
-      const sorted = [...arr].sort((a,b) => b.ts - a.ts);
+      function normalizeText(t){
+        return safe(t).replace(/\\n/g, "\n").trim();
+      }
 
-      const blocks = sorted.map(item => {
-        const when = new Date(item.ts).toLocaleString();
-        return `🕒 ${when}\n${item.text}`;
-      });
+      function parsePickedAt(v){
+        if (!v) return null;
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d;
+      }
 
-      resultEl.innerText = blocks.join("\n\n--------------------------------\n\n");
-      timeEl.innerText = `최근 ${HOURS}시간 결과 ${sorted.length}건`;
-    }
+      function loadHistory(){
+        try{
+          const raw = localStorage.getItem(STORAGE_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          return Array.isArray(arr) ? arr : [];
+        } catch {
+          return [];
+        }
+      }
 
-    async function loadResult(){
-      try{
-        // 캐시 방지용 타임스탬프
-        const res = await fetch(API_URL + "?_=" + Date.now());
-        const json = await res.json();
+      function saveHistory(arr){
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+      }
 
-        // Apps Script 응답 형태가 달라도 대응
-        const data = json.data ?? json;
+      function pruneHistory(arr){
+        const now = Date.now();
+        return arr.filter(item =>
+          item &&
+          typeof item.ts === "number" &&
+          typeof item.text === "string" &&
+          (now - item.ts) <= MAX_AGE_MS
+        );
+      }
 
-        const resultTextRaw = data.resultText || data.text || "";
-        const pickedAtRaw   = data.pickedAt || data.updatedAt || "";
+      function renderHistory(arr){
+        const resultEl = document.getElementById("result");
+        const timeEl   = document.getElementById("time");
 
-        const resultText = normalizeText(resultTextRaw);
-
-        // 기존 기록 불러오고 오래된 것 삭제
-        let history = pruneHistory(loadHistory());
-
-        if (!resultText){
-          // 결과가 없으면 누적만 유지해서 보여줌
-          saveHistory(history);
-          renderHistory(history);
+        if (!arr.length){
+          resultEl.innerText = "최근 3시간 내 팀 매칭 결과가 없습니다.";
+          timeEl.innerText = "";
           return;
         }
 
-        // pickedAt이 없거나 파싱 실패하면 "지금"으로 기록
-        const pickedAtDate = parsePickedAt(pickedAtRaw);
-        const ts = pickedAtDate ? pickedAtDate.getTime() : Date.now();
+        const sorted = [...arr].sort((a,b) => b.ts - a.ts);
 
-        // ✅ 중복 방지 (같은 ts + 같은 text면 추가 안 함)
-        const exists = history.some(h => h.ts === ts && h.text === resultText);
-        if (!exists){
-          history.push({ ts, text: resultText });
-        }
+        const blocks = sorted.map(item => {
+          const when = new Date(item.ts).toLocaleString();
+          return `🕒 ${when}\n${item.text}`;
+        });
 
-        // 저장 + 렌더
-        history = pruneHistory(history);
-        saveHistory(history);
-        renderHistory(history);
-
-      } catch(e){
-        // 에러 시에도 기존 누적은 보여주기
-        const history = pruneHistory(loadHistory());
-        saveHistory(history);
-        renderHistory(history);
+        resultEl.innerText = blocks.join("\n\n--------------------------------\n\n");
+        timeEl.innerText = `최근 ${HOURS}시간 결과 ${sorted.length}건`;
       }
-    }
 
-    loadResult();
-    setInterval(loadResult, 15000); // 15초마다 자동 갱신
+      async function loadResult(){
+        try{
+          const res = await fetch(API_URL + "?_=" + Date.now(), { cache: "no-store" });
+          const json = await res.json();
+          const data = (json && json.data) ? json.data : json;
+
+          const resultTextRaw = data.resultText || data.text || "";
+          const pickedAtRaw   = data.pickedAt || data.updatedAt || "";
+
+          const resultText = normalizeText(resultTextRaw);
+
+          let history = pruneHistory(loadHistory());
+
+          if (!resultText){
+            saveHistory(history);
+            renderHistory(history);
+            return;
+          }
+
+          const pickedAtDate = parsePickedAt(pickedAtRaw);
+          const ts = pickedAtDate ? pickedAtDate.getTime() : Date.now();
+
+          const exists = history.some(h => h.ts === ts && h.text === resultText);
+          if (!exists){
+            history.push({ ts, text: resultText });
+          }
+
+          history = pruneHistory(history);
+          saveHistory(history);
+          renderHistory(history);
+
+        } catch(e){
+          const history = pruneHistory(loadHistory());
+          saveHistory(history);
+          renderHistory(history);
+        }
+      }
+
+      loadResult();
+      setInterval(loadResult, 15000);
+    });
   </script>
 </body>
 </html>
