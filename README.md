@@ -141,7 +141,7 @@
         const dd = String(d.getDate()).padStart(2, "0");
         const hh = String(d.getHours()).padStart(2, "0");
         const mi = String(d.getMinutes()).padStart(2, "0");
-        return `${mm}.${dd} / ${hh}:${mi}`;
+        return `${mm}월${dd}일 ${hh}시:${mi}분`;
       }
 
       function loadHistory(){
@@ -177,7 +177,7 @@
           `🕒 ${formatTime(v.ts)}\n${v.text}`
         );
 
-        resultEl.innerText = blocks.join("\n\n────────────────────────\n\n");
+        resultEl.innerText = blocks.join("\n\n─────────────────\n\n");
         timeEl.innerText = `최근 ${HOURS}시간 · ${sorted.length}건`;
       }
 
