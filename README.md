@@ -38,6 +38,7 @@
       background:#f9fafb;
       padding:16px;
       border-radius:12px;
+      margin:0;
     }
     .hint{
       font-size:12px;
@@ -53,7 +54,7 @@
     <h1>🏸 RKS 팀 매칭 결과</h1>
     <div class="time" id="time"></div>
     <pre id="result">결과를 불러오는 중…</pre>
-    <div class="hint">이 페이지는 자동으로 최신 결과를 표시합니다</div>
+    <div class="hint">이 페이지는 자동으로 최신 결과를 누적 표시합니다 (최근 3시간)</div>
   </div>
 
   <script>
@@ -63,14 +64,73 @@
     const API_URL =
       "https://script.google.com/macros/s/AKfycbwRcIc-LvIumOnpsmthxObSYgVgqq2obWS69VVPt9k2gBBfLHLHeQZeGB3r6rpuyVE/exec";
 
+    // ✅ 최근 N시간 누적 표시 설정
+    const HOURS = 3;
+    const MAX_AGE_MS = HOURS * 60 * 60 * 1000;
+    const STORAGE_KEY = "rks_team_results_v1";
+
     function safe(v){
       return (v === null || v === undefined) ? "" : String(v);
     }
 
-    async function loadResult(){
+    function normalizeText(t){
+      // \n이 문자열로 올 경우 실제 줄바꿈 처리
+      return safe(t).replace(/\\n/g, "\n").trim();
+    }
+
+    function parsePickedAt(v){
+      if (!v) return null;
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    function loadHistory(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveHistory(arr){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+    }
+
+    function pruneHistory(arr){
+      const now = Date.now();
+      return arr.filter(item =>
+        item &&
+        typeof item.ts === "number" &&
+        typeof item.text === "string" &&
+        (now - item.ts) <= MAX_AGE_MS
+      );
+    }
+
+    function renderHistory(arr){
       const resultEl = document.getElementById("result");
       const timeEl   = document.getElementById("time");
 
+      if (!arr.length){
+        resultEl.innerText = "최근 3시간 내 팀 매칭 결과가 없습니다.";
+        timeEl.innerText = "";
+        return;
+      }
+
+      // 최신순 정렬
+      const sorted = [...arr].sort((a,b) => b.ts - a.ts);
+
+      const blocks = sorted.map(item => {
+        const when = new Date(item.ts).toLocaleString();
+        return `🕒 ${when}\n${item.text}`;
+      });
+
+      resultEl.innerText = blocks.join("\n\n--------------------------------\n\n");
+      timeEl.innerText = `최근 ${HOURS}시간 결과 ${sorted.length}건`;
+    }
+
+    async function loadResult(){
       try{
         // 캐시 방지용 타임스탬프
         const res = await fetch(API_URL + "?_=" + Date.now());
@@ -79,31 +139,41 @@
         // Apps Script 응답 형태가 달라도 대응
         const data = json.data ?? json;
 
-        // ✅ 우리가 원하는 것
-        const resultText =
-          data.resultText || data.text || "";
+        const resultTextRaw = data.resultText || data.text || "";
+        const pickedAtRaw   = data.pickedAt || data.updatedAt || "";
 
-        const pickedAt =
-          data.pickedAt || data.updatedAt || "";
+        const resultText = normalizeText(resultTextRaw);
 
-        if (!resultText) {
-          resultEl.innerText = "아직 팀 매칭 결과가 없습니다.";
-        } else {
-          // \n이 문자열로 올 경우 실제 줄바꿈 처리
-          resultEl.innerText =
-            safe(resultText).replace(/\\n/g, "\n").trim();
+        // 기존 기록 불러오고 오래된 것 삭제
+        let history = pruneHistory(loadHistory());
+
+        if (!resultText){
+          // 결과가 없으면 누적만 유지해서 보여줌
+          saveHistory(history);
+          renderHistory(history);
+          return;
         }
 
-        if (pickedAt) {
-          timeEl.innerText =
-            "뽑은 시간: " + new Date(pickedAt).toLocaleString();
-        } else {
-          timeEl.innerText = "";
+        // pickedAt이 없거나 파싱 실패하면 "지금"으로 기록
+        const pickedAtDate = parsePickedAt(pickedAtRaw);
+        const ts = pickedAtDate ? pickedAtDate.getTime() : Date.now();
+
+        // ✅ 중복 방지 (같은 ts + 같은 text면 추가 안 함)
+        const exists = history.some(h => h.ts === ts && h.text === resultText);
+        if (!exists){
+          history.push({ ts, text: resultText });
         }
+
+        // 저장 + 렌더
+        history = pruneHistory(history);
+        saveHistory(history);
+        renderHistory(history);
 
       } catch(e){
-        resultEl.innerText = "결과를 불러오지 못했습니다.";
-        timeEl.innerText = "";
+        // 에러 시에도 기존 누적은 보여주기
+        const history = pruneHistory(loadHistory());
+        saveHistory(history);
+        renderHistory(history);
       }
     }
 
