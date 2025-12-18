@@ -21,25 +21,15 @@
       box-shadow:0 12px 30px rgba(0,0,0,.12);
     }
     h1{
-      margin:0 0 10px;
+      margin:0 0 12px;
       font-size:22px;
       text-align:center;
     }
-    .meta{
-      display:flex;
-      flex-wrap:wrap;
-      gap:8px 12px;
-      justify-content:center;
-      align-items:center;
-      margin-bottom:14px;
+    .time{
+      font-size:13px;
       color:#6b7280;
-      font-size:12px;
-    }
-    .pill{
-      background:#f9fafb;
-      border:1px solid #e5e7eb;
-      padding:6px 10px;
-      border-radius:999px;
+      margin-bottom:14px;
+      text-align:center;
     }
     pre{
       white-space:pre-wrap;
@@ -49,27 +39,12 @@
       background:#f9fafb;
       padding:16px;
       border-radius:12px;
-      border:1px solid #eef2f7;
-      margin:0;
     }
-    details{
+    .hint{
+      font-size:12px;
+      color:#9ca3af;
       margin-top:12px;
-    }
-    summary{
-      cursor:pointer;
-      font-size:12px;
-      color:#6b7280;
-    }
-    .raw{
-      margin-top:8px;
-      font-size:12px;
-      color:#374151;
-      background:#fff;
-      border:1px solid #e5e7eb;
-      border-radius:12px;
-      padding:12px;
-      white-space:pre-wrap;
-      word-break:break-word;
+      text-align:center;
     }
   </style>
 </head>
@@ -77,131 +52,64 @@
 <body>
   <div class="card">
     <h1>🏸 RKS 팀 매칭 결과</h1>
-
-    <div class="meta">
-      <span class="pill" id="pickedAt">뽑은 시간: -</span>
-      <span class="pill" id="fetchedAt">불러온 시간: -</span>
-      <span class="pill" id="status">상태: 대기</span>
-    </div>
-
+    <div class="time" id="time"></div>
     <pre id="result">결과를 불러오는 중…</pre>
-
-    <details>
-      <summary>문제 해결용: 원본 응답 보기</summary>
-      <div class="raw" id="raw">(원본 응답이 여기에 표시됩니다)</div>
-    </details>
+    <div class="hint">이 페이지는 자동으로 최신 결과를 표시합니다</div>
   </div>
 
   <script>
-    // ✅ 너의 Apps Script Web App URL
+    /*********************************************************
+     * 🔽 Apps Script Web App URL
+     *********************************************************/
     const API_URL =
       "https://script.google.com/macros/s/AKfycbwRcIc-LvIumOnpsmthxObSYgVgqq2obWS69VVPt9k2gBBfLHLHeQZeGB3r6rpuyVE/exec";
 
-    const $ = (id) => document.getElementById(id);
-
-    function s(v){ return (v === null || v === undefined) ? "" : String(v); }
-
-    // 어떤 응답이 오든 "조편성 텍스트"를 최대한 찾아내기
-    function extractTextAndTime(parsedJson){
-      // 1) { ok:true, data:{...} } 형태면 data 우선
-      const data = (parsedJson && typeof parsedJson === "object" && "data" in parsedJson)
-        ? parsedJson.data
-        : parsedJson;
-
-      // 2) 텍스트 후보들(가능한 모든 키 대응)
-      // - text (업로드 payload에 들어있던 결과 텍스트)
-      // - resultText / payloadText (Code.gs에서 텍스트만 저장하도록 바꾼 경우)
-      // - payload (혹시 payload에 JSON문자열/객체가 들어오는 경우)
-      let text =
-        s(data?.text) ||
-        s(data?.resultText) ||
-        s(data?.payloadText);
-
-      // payload가 문자열(JSON)일 수도 있어서 추가 처리
-      if (!text && data?.payload) {
-        if (typeof data.payload === "string") {
-          // payload가 JSON 문자열이면 파싱 시도 후 text 꺼내기
-          try {
-            const maybeObj = JSON.parse(data.payload);
-            text = s(maybeObj?.text) || s(maybeObj?.resultText) || s(maybeObj?.payloadText) || "";
-          } catch {
-            // 그냥 문자열이면 그대로 표시(그래도 JSON 전체면 보기 싫으니 text 없으면 빈 처리)
-            text = "";
-          }
-        } else if (typeof data.payload === "object") {
-          text = s(data.payload.text) || s(data.payload.resultText) || s(data.payload.payloadText) || "";
-        }
-      }
-
-      // 3) 시간 후보들
-      const pickedAt =
-        data?.pickedAt ||
-        data?.updatedAt ||
-        (data?.data && (data.data.pickedAt || data.data.updatedAt)) ||
-        "";
-
-      // \n이 "문자 두개"로 들어오면 실제 줄바꿈으로
-      text = s(text).replace(/\\n/g, "\n").trim();
-
-      return { text, pickedAt };
+    function safe(v){
+      return (v === null || v === undefined) ? "" : String(v);
     }
 
     async function loadResult(){
-      $("status").innerText = "상태: 불러오는 중…";
-      $("fetchedAt").innerText = "불러온 시간: " + new Date().toLocaleString();
+      const resultEl = document.getElementById("result");
+      const timeEl   = document.getElementById("time");
 
       try{
-        const res = await fetch(API_URL + "?_=" + Date.now()); // 캐시 방지
-        const rawText = await res.text();
-        $("raw").innerText = rawText;
+        // 캐시 방지용 타임스탬프
+        const res = await fetch(API_URL + "?_=" + Date.now());
+        const json = await res.json();
 
-        // JSON 파싱 시도
-        let parsed = null;
-        try { parsed = JSON.parse(rawText); } catch { parsed = null; }
+        // Apps Script 응답 형태가 달라도 대응
+        const data = json.data ?? json;
 
-        if (!parsed) {
-          $("status").innerText = "상태: 응답이 JSON이 아님";
-          $("result").innerText = "결과를 불러오지 못했습니다. (응답 형식 오류)";
-          $("pickedAt").innerText = "뽑은 시간: -";
-          return;
+        // ✅ 우리가 원하는 것
+        const resultText =
+          data.resultText || data.text || "";
+
+        const pickedAt =
+          data.pickedAt || data.updatedAt || "";
+
+        if (!resultText) {
+          resultEl.innerText = "아직 팀 매칭 결과가 없습니다.";
+        } else {
+          // \n이 문자열로 올 경우 실제 줄바꿈 처리
+          resultEl.innerText =
+            safe(resultText).replace(/\\n/g, "\n").trim();
         }
-
-        // ok:false면 에러 표시
-        if (parsed.ok === false) {
-          $("status").innerText = "상태: 오류(" + s(parsed.error) + ")";
-          $("result").innerText = "결과를 불러오지 못했습니다.";
-          $("pickedAt").innerText = "뽑은 시간: -";
-          return;
-        }
-
-        const { text, pickedAt } = extractTextAndTime(parsed);
-
-        if (!text) {
-          $("status").innerText = "상태: 결과 없음(또는 키 불일치)";
-          $("result").innerText = "아직 팀 매칭 결과가 없거나, 결과 형식이 바뀌었습니다.";
-          $("pickedAt").innerText = "뽑은 시간: -";
-          return;
-        }
-
-        $("status").innerText = "상태: 정상";
-        $("result").innerText = text;
 
         if (pickedAt) {
-          $("pickedAt").innerText = "뽑은 시간: " + new Date(pickedAt).toLocaleString();
+          timeEl.innerText =
+            "뽑은 시간: " + new Date(pickedAt).toLocaleString();
         } else {
-          $("pickedAt").innerText = "뽑은 시간: -";
+          timeEl.innerText = "";
         }
 
       } catch(e){
-        $("status").innerText = "상태: 네트워크/권한 오류";
-        $("result").innerText =
-          "결과를 불러오지 못했습니다.\n\n(가능한 원인)\n- Apps Script 웹앱 권한이 '모든 사용자(Anyone)'가 아님\n- 배포 버전 업데이트가 안 됨\n- 일시적인 네트워크 문제";
-        $("pickedAt").innerText = "뽑은 시간: -";
+        resultEl.innerText = "결과를 불러오지 못했습니다.";
+        timeEl.innerText = "";
       }
     }
 
     loadResult();
-    setInterval(loadResult, 15000);
+    setInterval(loadResult, 15000); // 15초마다 자동 갱신
   </script>
 </body>
 </html>
